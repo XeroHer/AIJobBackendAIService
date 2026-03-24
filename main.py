@@ -1,8 +1,12 @@
-from fastapi import FastAPI, HTTPException
+# main.py
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import numpy as np
 
+# Import your AI modules
 from AI.embedding import get_embedding
 from AI.skills import extract_skills
 from AI.matching import recommend_roles, match_jobs
@@ -10,25 +14,32 @@ from AI.roadmap import build_roadmap
 
 app = FastAPI(title="ATS & Career API")
 
+# --- Enable CORS for frontend on port 5000 ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5000"],  # change to your deployed frontend URL in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+# --- Helper ---
 def cosine_similarity(a, b):
     a = np.array(a)
     b = np.array(b)
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-
+# --- Request models ---
 class JobItem(BaseModel):
     id: str
     description: str
-
 
 class ATSRequest(BaseModel):
     resume: str
     jobDescription: Optional[str] = ""
     jobs: Optional[List[JobItem]] = []
 
-from fastapi.responses import JSONResponse
-
+# --- ATS analyze endpoint ---
 @app.post("/ats/analyze")
 def analyze(data: ATSRequest):
     try:
@@ -71,5 +82,11 @@ def analyze(data: ATSRequest):
         )
 
     except Exception as e:
-        # Always return JSON even on exception
         return JSONResponse(status_code=500, content={"success": False, "message": str(e)})
+
+# --- Run on Render with correct port ---
+if __name__ == "__main__":
+    import os
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))  # use Render-assigned PORT
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
