@@ -17,7 +17,7 @@ app = FastAPI(title="ATS & Career API")
 # --- Enable CORS for frontend on port 5000 ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5000"],  # change to your deployed frontend URL in production
+    allow_origins=["https://aijobportals.netlify.app"],  # change to your deployed frontend URL in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
