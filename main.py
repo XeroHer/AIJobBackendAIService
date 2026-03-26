@@ -26,9 +26,10 @@ except ModuleNotFoundError as e:
 app = FastAPI(title="ATS & Career API")
 
 # --- Enable CORS for frontend ---
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5000")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://aijobportals.netlify.app"],  # Update to your deployed frontend URL
+    allow_origins=[FRONTEND_URL],  # Update to your deployed frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
