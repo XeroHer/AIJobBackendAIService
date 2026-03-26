@@ -52,9 +52,12 @@ class ATSRequest(BaseModel):
     jobs: Optional[List[JobItem]] = []
 
 # --- Health check endpoint ---
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
-    return {"status": "ok", "message": "ATS & Career API is live!"}
+    return {
+        "status": "ok",
+        "message": "ATS & Career API is live!"
+    }
 
 # --- ATS analyze endpoint ---
 @app.post("/ats/analyze")
