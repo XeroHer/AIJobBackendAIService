@@ -1,4 +1,6 @@
 # main.py
+import os
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -6,18 +8,27 @@ from pydantic import BaseModel
 from typing import List, Optional
 import numpy as np
 
-# Import your AI modules
-from AI.embedding import get_embedding
-from AI.skills import extract_skills
-from AI.matching import recommend_roles, match_jobs
-from AI.roadmap import build_roadmap
+# --- Logging ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ats-api")
 
+# --- Import AI modules safely ---
+try:
+    from AI.embedding import get_embedding
+    from AI.skills import extract_skills
+    from AI.matching import recommend_roles, match_jobs
+    from AI.roadmap import build_roadmap
+except ModuleNotFoundError as e:
+    logger.error(f"AI module import failed: {e}")
+    get_embedding = extract_skills = recommend_roles = match_jobs = build_roadmap = None
+
+# --- Initialize FastAPI ---
 app = FastAPI(title="ATS & Career API")
 
-# --- Enable CORS for frontend on port 5000 ---
+# --- Enable CORS for frontend ---
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://aijobportals.netlify.app"],  # change to your deployed frontend URL in production
+    allow_origins=["https://aijobportals.netlify.app"],  # Update to your deployed frontend URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,10 +50,22 @@ class ATSRequest(BaseModel):
     jobDescription: Optional[str] = ""
     jobs: Optional[List[JobItem]] = []
 
+# --- Health check endpoint ---
+@app.get("/")
+def health_check():
+    return {"status": "ok", "message": "ATS & Career API is live!"}
+
 # --- ATS analyze endpoint ---
 @app.post("/ats/analyze")
 def analyze(data: ATSRequest):
+    logger.info("Received ATS analyze request")
     try:
+        if get_embedding is None:
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "message": "AI modules not loaded"}
+            )
+
         resume = (data.resume or "").strip()[:5000]
         job_desc = (data.jobDescription or "").strip()[:5000]
         jobs = data.jobs or []
@@ -82,11 +105,20 @@ def analyze(data: ATSRequest):
         )
 
     except Exception as e:
+        logger.exception("Error in /ats/analyze")
         return JSONResponse(status_code=500, content={"success": False, "message": str(e)})
 
-# --- Run on Render with correct port ---
+# --- Run with Render-assigned port ---
 if __name__ == "__main__":
-    import os
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn_kwargs = {
+        "app": "main:app",
+        "host": "0.0.0.0",
+        "port": port,
+    }
+    # Reload only for local dev
+    if os.environ.get("ENV") != "production":
+        uvicorn_kwargs["reload"] = True
+
     import uvicorn
-    port = int(os.environ.get("PORT", 8000))  # use Render-assigned PORT
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run(**uvicorn_kwargs)
