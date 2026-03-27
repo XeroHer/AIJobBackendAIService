@@ -114,15 +114,7 @@ def analyze(data: ATSRequest):
 
 # --- Run with Render-assigned port ---
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn_kwargs = {
-        "app": "main:app",
-        "host": "0.0.0.0",
-        "port": port,
-    }
-    # Reload only for local dev
-    if os.environ.get("ENV") != "production":
-        uvicorn_kwargs["reload"] = True
-
     import uvicorn
-    uvicorn.run(**uvicorn_kwargs)
+    port = int(os.environ.get("PORT", 8000))
+    print(f"Starting server on port {port}...")
+    uvicorn.run("main:app", host="0.0.0.0", port=port)
