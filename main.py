@@ -18,8 +18,8 @@ try:
     from AI.skills import extract_skills
     from AI.matching import recommend_roles, match_jobs
     from AI.roadmap import build_roadmap
-except ModuleNotFoundError as e:
-    logger.error(f"AI module import failed: {e}")
+except Exception as e:
+    logger.exception(f"AI module import failed: {e}")
     get_embedding = extract_skills = recommend_roles = match_jobs = build_roadmap = None
 
 # --- Initialize FastAPI ---
@@ -29,7 +29,7 @@ app = FastAPI(title="ATS & Career API")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5000")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_URL],  # Update to your deployed frontend URL
+    allow_origins=[FRONTEND_URL],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,13 +51,15 @@ class ATSRequest(BaseModel):
     jobDescription: Optional[str] = ""
     jobs: Optional[List[JobItem]] = []
 
+# --- Startup event ---
+@app.on_event("startup")
+def startup_event():
+    print("✅ FastAPI app started successfully")
+
 # --- Health check endpoint ---
 @app.api_route("/", methods=["GET", "HEAD"])
 def health_check():
-    return {
-        "status": "ok",
-        "message": "ATS & Career API is live!"
-    }
+    return {"status": "ok", "message": "ATS & Career API is live!"}
 
 # --- ATS analyze endpoint ---
 @app.post("/ats/analyze")
@@ -75,25 +77,42 @@ def analyze(data: ATSRequest):
         jobs = data.jobs or []
 
         if not resume:
-            return JSONResponse(status_code=400, content={"success": False, "message": "Resume is required"})
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "message": "Resume is required"}
+            )
 
-        resume_embedding = get_embedding(resume)
+        # --- Safe embedding ---
+        try:
+            resume_embedding = get_embedding(resume)
+        except Exception as e:
+            logger.error(f"Embedding failed: {e}")
+            # fallback to dummy vector so app doesn't crash
+            resume_embedding = [0.0] * 384
 
         # ATS score
         if job_desc:
-            job_embedding = get_embedding(job_desc)
-            similarity = cosine_similarity(resume_embedding, job_embedding)
-            ats_score = float(((similarity + 1) / 2) * 100)  # normalized 0–100
+            try:
+                job_embedding = get_embedding(job_desc)
+                similarity = cosine_similarity(resume_embedding, job_embedding)
+                ats_score = float(((similarity + 1) / 2) * 100)
+            except Exception as e:
+                logger.error(f"Job embedding failed: {e}")
+                ats_score = 0.0
         else:
             ats_score = 0.0
 
-        resume_skills = extract_skills(resume)
-        job_skills = extract_skills(job_desc)
-        missing_skills = [s for s in job_skills if s not in resume_skills]
-
-        recommended_roles = recommend_roles(resume_embedding)
-        roadmap = build_roadmap(missing_skills)
-        recommended_jobs = match_jobs(resume_embedding, jobs)
+        # --- Safe AI module calls ---
+        try:
+            resume_skills = extract_skills(resume) if extract_skills else []
+            job_skills = extract_skills(job_desc) if extract_skills else []
+            missing_skills = [s for s in job_skills if s not in resume_skills]
+            recommended_roles = recommend_roles(resume_embedding) if recommend_roles else []
+            roadmap = build_roadmap(missing_skills) if build_roadmap else []
+            recommended_jobs = match_jobs(resume_embedding, jobs) if match_jobs else []
+        except Exception as e:
+            logger.error(f"AI processing failed: {e}")
+            resume_skills = job_skills = missing_skills = recommended_roles = roadmap = recommended_jobs = []
 
         return JSONResponse(
             status_code=200,
